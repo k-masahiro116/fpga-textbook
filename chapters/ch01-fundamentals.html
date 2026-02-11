@@ -580,5 +580,37 @@ FPGA設計フロー
         </footer>
     </div>
 
+    <script>
+        const toc = document.getElementById('toc');
+        const tocLinks = Array.from(toc.querySelectorAll('a[href^="#"]'));
+        const sections = tocLinks
+            .map(link => document.querySelector(link.getAttribute('href')))
+            .filter(Boolean);
+
+        const setActiveLink = (id) => {
+            tocLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                link.classList.toggle('active', href === `#${id}`);
+            });
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    setActiveLink(entry.target.id);
+                }
+            });
+        }, {
+            rootMargin: '-20% 0px -70% 0px',
+            threshold: 0
+        });
+
+        sections.forEach(section => observer.observe(section));
+
+        if (sections.length > 0) {
+            setActiveLink(sections[0].id);
+        }
+    </script>
+
 </body>
 </html>

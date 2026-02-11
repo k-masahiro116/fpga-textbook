@@ -112,6 +112,12 @@ nav a:hover {
     color: #667eea;
 }
 
+.sidebar a.active {
+    background-color: #e7e9fc;
+    color: #667eea;
+    font-weight: 600;
+}
+
 
 .content {
     min-width: 0;
