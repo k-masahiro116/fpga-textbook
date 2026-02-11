@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPGA教科書 - 第2章: HDL入門</title>
+    <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+    <aside class="sidebar" id="toc">
+        <h3>目次</h3>
+        <ul>
+            <li><a href="#section1">1. HDLとは</a></li>
+            <li><a href="#section2">2. 記述レベルの概要</a></li>
+            <li><a href="#section3">3. 開発ツールの流れ</a></li>
+            <li><a href="#section4">4. VerilogとVHDLの違い</a></li>
+            <li><a href="#section5">5. 最初の記述例</a></li>
+            <li><a href="#section6">6. 次に学ぶこと</a></li>
+        </ul>
+    </aside>
+
+    <div class="container">
+        <header>
+            <h1>FPGA教科書</h1>
+            <p>第2章: HDL入門</p>
+        </header>
+
+        <main class="content">
+            <div class="breadcrumbs">
+                <a href="../index.html">トップ</a> / 第2章
+            </div>
+
+            <h1 style="text-align: center; color: #667eea; margin-bottom: 2rem;">第2章: HDL入門</h1>
+
+            <section id="section1">
+                <h2>1. HDLとは</h2>
+                <p>
+                    HDL（Hardware Description Language）は、ハードウェアの構造や動作を記述するための言語です。
+                    ソフトウェア開発と同様にテキストで設計を表現できますが、最終的に回路として合成される点が大きな違いです。
+                </p>
+            </section>
+
+            <section id="section2">
+                <h2>2. 記述レベルの概要</h2>
+                <p>
+                    HDLには複数の抽象レベルがあります。最初はRTL（レジスタ転送レベル）の考え方を理解するのが重要です。
+                </p>
+                <ul>
+                    <li><strong>動作記述</strong>: 回路の動きを中心に記述</li>
+                    <li><strong>RTL記述</strong>: レジスタ間のデータ転送を記述</li>
+                    <li><strong>構造記述</strong>: 回路ブロックの接続関係を記述</li>
+                </ul>
+            </section>
+
+            <section id="section3">
+                <h2>3. 開発ツールの流れ</h2>
+                <p>
+                    HDLで書いた設計は、シミュレーション・論理合成・配置配線といった工程を経てFPGA上で動作します。
+                    実際のツールを触る前に、全体の流れを把握しておきましょう。
+                </p>
+            </section>
+
+            <section id="section4">
+                <h2>4. VerilogとVHDLの違い</h2>
+                <p>
+                    FPGA設計でよく使われるHDLはVerilogとVHDLです。それぞれに特徴があり、用途や文化で使い分けられます。
+                </p>
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>項目</th>
+                            <th>Verilog</th>
+                            <th>VHDL</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>文法</strong></td>
+                            <td>C言語に近い</td>
+                            <td>Ada言語に近い</td>
+                        </tr>
+                        <tr>
+                            <td><strong>記述量</strong></td>
+                            <td>比較的短い</td>
+                            <td>冗長になりやすい</td>
+                        </tr>
+                        <tr>
+                            <td><strong>型の厳密さ</strong></td>
+                            <td>緩め</td>
+                            <td>厳密</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <section id="section5">
+                <h2>5. 最初の記述例</h2>
+                <p>
+                    次の章で実際にコードを書いていきます。ここでは、簡単な論理回路をHDLで表現できることをイメージしておきましょう。
+                </p>
+                <div class="note">
+                    <strong>例:</strong> ANDゲートやフリップフロップの記述から始めるのが一般的です。
+                </div>
+            </section>
+
+            <section id="section6">
+                <h2>6. 次に学ぶこと</h2>
+                <p>
+                    次は、実際のHDL文法と基本構文、テストベンチの書き方などを掘り下げていきます。
+                </p>
+                <a class="home-link" href="../index.html">トップに戻る</a>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2025 FPGA教科書プロジェクト</p>
+        </footer>
+    </div>
+
+    <script>
+        const toc = document.getElementById('toc');
+        const tocLinks = Array.from(toc.querySelectorAll('a[href^="#"]'));
+        const sections = tocLinks
+            .map(link => document.querySelector(link.getAttribute('href')))
+            .filter(Boolean);
+
+        const setActiveLink = (id) => {
+            tocLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                link.classList.toggle('active', href === `#${id}`);
+            });
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    setActiveLink(entry.target.id);
+                }
+            });
+        }, {
+            rootMargin: '-20% 0px -70% 0px',
+            threshold: 0
+        });
+
+        sections.forEach(section => observer.observe(section));
+
+        if (sections.length > 0) {
+            setActiveLink(sections[0].id);
+        }
+    </script>
+</body>
+</html>
