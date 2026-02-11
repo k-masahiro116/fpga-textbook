@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPGA教科書 - 第1章: 基礎理論</title>
+    <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>FPGA教科書</h1>
+            <p>第1章: FPGA基礎理論</p>
+        </header>
+
+        <nav>
+            <h3>目次</h3>
+            <ul>
+                <li><a href="#section1">1. FPGAとは</a></li>
+                <li><a href="#section2">2. FPGAの歴史</a></li>
+                <li><a href="#section3">3. ASICとの比較</a></li>
+                <li><a href="#section4">4. 内部アーキテクチャ</a></li>
+                <li><a href="#section5">5. デジタル論理の基礎</a></li>
+                <li><a href="#section6">6. 設計フロー</a></li>
+            </ul>
+        </nav>
+
+        <main>
+            <div class="breadcrumbs">
+                <a href="../index.html">トップ</a> / 第1章
+            </div>
+
+            <h1 style="text-align: center; color: #667eea; margin-bottom: 2rem;">第1章: FPGA基礎理論</h1>
+
+            <section id="section1">
+                <h2>1. FPGAとは</h2>
+
+                <p>
+                    FPGA（Field Programmable Gate Array: フィールドプログラマブルゲートアレイ）は、製造後にユーザーが自由に回路設計を変更できる集積回路（IC）です。「プログラマブル」という名前の通り、ソフトウェアのようにハードウェアの動作を何度でも書き換えることができます。
+                </p>
+
+                <div class="key-point">
+                    <h4>重要ポイント</h4>
+                    <p>FPGAの最大の特徴は、<strong>ハードウェアをソフトウェアのように柔軟に変更できる</strong>ことです。これにより、開発期間の短縮、コスト削減、そして市場投入後のアップデートが可能になります。</p>
+                </div>
+
+                <h3>FPGAの主な特徴</h3>
+                <ul>
+                    <li><strong>再構成可能性</strong>: 何度でも回路設計を書き換えられる</li>
+                    <li><strong>並列処理</strong>: 複数の処理を同時に実行できる</li>
+                    <li><strong>低レイテンシ</strong>: ソフトウェアに比べて高速な応答が可能</li>
+                    <li><strong>カスタマイズ性</strong>: 特定のアプリケーションに最適化できる</li>
+                    <li><strong>開発の柔軟性</strong>: プロトタイピングから量産まで対応</li>
+                </ul>
+
+                <h3>FPGAの応用分野</h3>
+                <p>FPGAは様々な分野で活用されています：</p>
+                <ul>
+                    <li><strong>通信機器</strong>: 基地局、ルーター、スイッチ</li>
+                    <li><strong>データセンター</strong>: 高速データ処理、暗号化、圧縮</li>
+                    <li><strong>画像処理</strong>: カメラ、医療画像、産業検査</li>
+                    <li><strong>自動車</strong>: ADAS（先進運転支援システム）、LiDAR処理</li>
+                    <li><strong>航空宇宙</strong>: 衛星、レーダーシステム</li>
+                    <li><strong>金融</strong>: 高頻度取引（HFT）</li>
+                    <li><strong>AI/機械学習</strong>: ニューラルネットワークの推論処理</li>
+                </ul>
+            </section>
+
+            <section id="section2">
+                <h2>2. FPGAの歴史と発展</h2>
+
+                <h3>FPGAの誕生</h3>
+                <p>
+                    FPGAは1984年にXilinx社の共同創設者であるRoss Freemanによって発明されました。当時、デジタル回路の設計には以下のような選択肢がありました：
+                </p>
+                <ul>
+                    <li><strong>標準ロジックIC</strong>: 汎用的だが柔軟性に欠ける</li>
+                    <li><strong>ASIC</strong>: 高性能だが開発コストが高く、変更が困難</li>
+                    <li><strong>PLD（Programmable Logic Device）</strong>: 小規模な回路のみ対応</li>
+                </ul>
+
+                <p>
+                    FPGAはこれらの中間に位置し、柔軟性とコストのバランスを取った画期的な製品として登場しました。
+                </p>
+
+                <h3>技術の進化</h3>
+                <ol>
+                    <li><strong>1980年代</strong>: 初期のFPGA登場（数千ゲート規模）</li>
+                    <li><strong>1990年代</strong>: 容量増加とツールの改善（数万ゲート）</li>
+                    <li><strong>2000年代</strong>: 高速化、低消費電力化（数百万ゲート）</li>
+                    <li><strong>2010年代</strong>: SoCとの統合、AI向け最適化</li>
+                    <li><strong>2020年代</strong>: AIアクセラレータ、データセンター向け製品</li>
+                </ol>
+
+                <div class="note">
+                    <strong>補足:</strong> 現在のFPGAは数十億個のトランジスタを含み、プロセッサコア、高速インターフェース、メモリコントローラなど、多様な機能を統合した高度なシステムとなっています。
+                </div>
+            </section>
+
+            <section id="section3">
+                <h2>3. ASICとの比較</h2>
+
+                <p>
+                    FPGA選定の判断には、ASIC（Application Specific Integrated Circuit: 特定用途向けIC）との違いを理解することが重要です。
+                </p>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>項目</th>
+                            <th>FPGA</th>
+                            <th>ASIC</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>開発期間</strong></td>
+                            <td>数週間〜数ヶ月</td>
+                            <td>6ヶ月〜2年以上</td>
+                        </tr>
+                        <tr>
+                            <td><strong>初期コスト</strong></td>
+                            <td>低い（数千円〜数十万円）</td>
+                            <td>非常に高い（数千万円〜数億円）</td>
+                        </tr>
+                        <tr>
+                            <td><strong>単価</strong></td>
+                            <td>高い</td>
+                            <td>低い（大量生産時）</td>
+                        </tr>
+                        <tr>
+                            <td><strong>柔軟性</strong></td>
+                            <td>何度でも変更可能</td>
+                            <td>製造後は変更不可</td>
+                        </tr>
+                        <tr>
+                            <td><strong>性能</strong></td>
+                            <td>中〜高</td>
+                            <td>非常に高い</td>
+                        </tr>
+                        <tr>
+                            <td><strong>消費電力</strong></td>
+                            <td>中〜高</td>
+                            <td>低い</td>
+                        </tr>
+                        <tr>
+                            <td><strong>適用分野</strong></td>
+                            <td>プロトタイプ、中小量産</td>
+                            <td>大量生産製品</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>FPGAを選択すべき場合</h3>
+                <ul>
+                    <li>製品開発のスピードが重要な場合</li>
+                    <li>市場投入後に機能追加や修正が必要な場合</li>
+                    <li>生産数量が中小規模（数千〜数万個）の場合</li>
+                    <li>プロトタイピングや概念実証が必要な場合</li>
+                    <li>仕様が未確定または変更の可能性がある場合</li>
+                </ul>
+
+                <h3>ASICを選択すべき場合</h3>
+                <ul>
+                    <li>大量生産（数十万個以上）の場合</li>
+                    <li>最高の性能と最低の消費電力が必要な場合</li>
+                    <li>仕様が完全に固まっている場合</li>
+                    <li>長期的なコスト削減が重要な場合</li>
+                </ul>
+            </section>
+
+            <section id="section4">
+                <h2>4. FPGAの内部アーキテクチャ</h2>
+
+                <p>
+                    FPGAの内部は、プログラム可能な論理ブロックと配線リソースから構成されています。ここでは主要な構成要素について説明します。
+                </p>
+
+                <h3>4.1 基本構成</h3>
+                <p>FPGAは主に以下の要素で構成されています：</p>
+
+                <div class="diagram">
+                    <pre>
+┌─────────────────────────────────────────┐
+│         FPGA内部構造（概念図）          │
+├─────────────────────────────────────────┤
+│                                         │
+│  ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐       │
+│  │CLB│─│CLB│─│CLB│─│CLB│─│CLB│       │
+│  └───┘ └───┘ └───┘ └───┘ └───┘       │
+│    │     │     │     │     │          │
+│  ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐       │
+│  │CLB│─│CLB│─│CLB│─│CLB│─│CLB│       │
+│  └───┘ └───┘ └───┘ └───┘ └───┘       │
+│    │     │     │     │     │          │
+│  ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐       │
+│  │CLB│─│CLB│─│CLB│─│CLB│─│CLB│       │
+│  └───┘ └───┘ └───┘ └───┘ └───┘       │
+│                                         │
+│  ┌──────┐  ┌──────┐  ┌──────┐         │
+│  │ BRAM │  │ BRAM │  │ BRAM │         │
+│  └──────┘  └──────┘  └──────┘         │
+│                                         │
+│  ┌──────┐  ┌──────┐  ┌──────┐         │
+│  │ DSP  │  │ DSP  │  │ DSP  │         │
+│  └──────┘  └──────┘  └──────┘         │
+│                                         │
+│  CLB: Configurable Logic Block         │
+│  BRAM: Block RAM                        │
+│  DSP: Digital Signal Processing         │
+└─────────────────────────────────────────┘
+                    </pre>
+                </div>
+
+                <h3>4.2 CLB (Configurable Logic Block)</h3>
+                <p>
+                    CLBはFPGAの最も基本的な構成要素で、論理回路を実装するためのブロックです。CLBは通常、以下の要素を含みます：
+                </p>
+                <ul>
+                    <li><strong>LUT（Look-Up Table）</strong>: 任意の論理関数を実装</li>
+                    <li><strong>フリップフロップ（FF）</strong>: データを記憶する素子</li>
+                    <li><strong>マルチプレクサ</strong>: 信号を選択・切り替え</li>
+                    <li><strong>演算用回路</strong>: 加算器など</li>
+                </ul>
+
+                <h4>LUT（ルックアップテーブル）</h4>
+                <p>
+                    LUTはFPGAの核心技術です。小さなメモリ（通常は16ビット〜64ビット）として動作し、任意の論理関数の真理値表を格納できます。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+4入力LUTの例（16ビットメモリ）
+
+入力: A, B, C, D
+出力: Y
+
+  ┌─────────────────┐
+  │  A ──┐          │
+  │  B ──┤          │
+  │  C ──┤ セレクタ │
+  │  D ──┘          │
+  │       │         │
+  │       ↓         │
+  │   ┌────────┐    │
+  │   │16ビット│    │
+  │   │メモリ  │─→ Y│
+  │   └────────┘    │
+  └─────────────────┘
+
+メモリの内容で論理関数が決まる
+例: AND, OR, XOR, 複雑な関数など
+                    </pre>
+                </div>
+
+                <div class="key-point">
+                    <h4>重要ポイント</h4>
+                    <p>4入力LUTは、4つの入力に対する任意の論理関数（2^4 = 16通りの入力組み合わせ）を実装できます。これが、FPGAが任意の回路を実装できる理由です。</p>
+                </div>
+
+                <h4>フリップフロップ（FF）</h4>
+                <p>
+                    フリップフロップは、クロック信号に同期してデータを保持する記憶素子です。順序回路（状態を持つ回路）の実装に不可欠です。
+                </p>
+
+                <h3>4.3 配線リソース</h3>
+                <p>
+                    CLB間を接続するための配線チャネルが格子状に配置されています。プログラマブルスイッチによって、任意のCLB間を接続できます。
+                </p>
+                <ul>
+                    <li><strong>局所配線</strong>: 近隣のCLB間を接続</li>
+                    <li><strong>長距離配線</strong>: 遠く離れたブロック間を高速接続</li>
+                    <li><strong>クロック配線</strong>: 専用の低スキュークロック配線網</li>
+                </ul>
+
+                <h3>4.4 ブロックRAM（BRAM）</h3>
+                <p>
+                    FPGAには、データを保存するための専用メモリブロックが組み込まれています。典型的には：
+                </p>
+                <ul>
+                    <li>18Kビット〜36Kビット単位のブロック</li>
+                    <li>デュアルポート対応（同時に2箇所からアクセス可能）</li>
+                    <li>様々なデータ幅に対応（1ビット〜72ビット）</li>
+                    <li>FIFO、ROM、RAMとして使用可能</li>
+                </ul>
+
+                <h3>4.5 DSPブロック</h3>
+                <p>
+                    デジタル信号処理用の専用ハードウェアブロックです。主な機能：
+                </p>
+                <ul>
+                    <li>高速な乗算器（18ビット×18ビットなど）</li>
+                    <li>累算器（積和演算）</li>
+                    <li>パイプライン構造による高スループット</li>
+                    <li>FIRフィルタ、FFT、畳み込み演算などに最適</li>
+                </ul>
+
+                <h3>4.6 I/Oブロック</h3>
+                <p>
+                    外部との信号のやり取りを行うブロックです：
+                </p>
+                <ul>
+                    <li>様々な電圧レベル対応（1.2V、1.8V、2.5V、3.3Vなど）</li>
+                    <li>差動信号対応（LVDS、TMDS等）</li>
+                    <li>高速シリアル通信（SerDes）</li>
+                    <li>入出力レジスタによる遅延削減</li>
+                </ul>
+            </section>
+
+            <section id="section5">
+                <h2>5. デジタル論理の基礎</h2>
+
+                <p>
+                    FPGAを理解するには、デジタル論理回路の基本を押さえることが重要です。
+                </p>
+
+                <h3>5.1 組み合わせ回路</h3>
+                <p>
+                    現在の入力のみで出力が決まる回路です。状態（メモリ）を持ちません。
+                </p>
+
+                <h4>基本ゲート</h4>
+                <ul>
+                    <li><strong>AND（論理積）</strong>: すべての入力が1のとき、出力が1</li>
+                    <li><strong>OR（論理和）</strong>: いずれかの入力が1のとき、出力が1</li>
+                    <li><strong>NOT（否定）</strong>: 入力を反転</li>
+                    <li><strong>NAND</strong>: ANDの出力を反転</li>
+                    <li><strong>NOR</strong>: ORの出力を反転</li>
+                    <li><strong>XOR（排他的論理和）</strong>: 入力が異なるとき1</li>
+                </ul>
+
+                <h4>組み合わせ回路の例</h4>
+                <ul>
+                    <li>デコーダ: n本の入力を2^n本の出力に変換</li>
+                    <li>エンコーダ: 2^n本の入力をn本の出力に変換</li>
+                    <li>マルチプレクサ: 複数の入力から1つを選択</li>
+                    <li>加算器: 2つの数値を加算</li>
+                    <li>比較器: 2つの値の大小を判定</li>
+                </ul>
+
+                <h3>5.2 順序回路</h3>
+                <p>
+                    過去の入力を記憶し、現在の入力と組み合わせて出力を決定する回路です。状態（メモリ）を持ちます。
+                </p>
+
+                <h4>基本素子</h4>
+                <ul>
+                    <li><strong>ラッチ</strong>: レベルセンシティブな記憶素子</li>
+                    <li><strong>フリップフロップ</strong>: エッジトリガー型記憶素子（クロック同期）</li>
+                </ul>
+
+                <h4>順序回路の例</h4>
+                <ul>
+                    <li>カウンタ: クロックごとに値をカウント</li>
+                    <li>レジスタ: データを一時保存</li>
+                    <li>シフトレジスタ: データをシフト</li>
+                    <li>ステートマシン（状態機械）: 状態遷移により複雑な動作を実現</li>
+                </ul>
+
+                <h3>5.3 同期設計と非同期設計</h3>
+
+                <h4>同期設計</h4>
+                <p>
+                    すべてのフリップフロップが共通のクロック信号で動作する設計手法。FPGAでは同期設計が標準です。
+                </p>
+                <ul>
+                    <li><strong>利点</strong>: タイミング解析が容易、安定動作、デバッグしやすい</li>
+                    <li><strong>欠点</strong>: クロック分配に注意が必要</li>
+                </ul>
+
+                <h4>非同期設計</h4>
+                <p>
+                    クロックを使わない、または複数の独立したクロックを使う設計。
+                </p>
+                <ul>
+                    <li><strong>利点</strong>: 低消費電力、高速応答</li>
+                    <li><strong>欠点</strong>: 設計が複雑、メタステーブルのリスク</li>
+                </ul>
+
+                <div class="note">
+                    <strong>推奨:</strong> FPGA設計では、できる限り同期設計を採用することが推奨されます。複数クロックドメインが必要な場合は、適切なクロックドメインクロッシング（CDC）技術を使用します。
+                </div>
+
+                <h3>5.4 タイミングの概念</h3>
+
+                <h4>セットアップタイム（Setup Time）</h4>
+                <p>
+                    クロックエッジの前に、データが安定している必要がある時間。
+                </p>
+
+                <h4>ホールドタイム（Hold Time）</h4>
+                <p>
+                    クロックエッジの後に、データが安定している必要がある時間。
+                </p>
+
+                <h4>クロック周期（Clock Period）</h4>
+                <p>
+                    クロックの1サイクルの時間。この範囲内ですべての論理演算を完了する必要があります。
+                </p>
+
+                <div class="key-point">
+                    <h4>重要ポイント</h4>
+                    <p>FPGAの最大動作周波数は、最も遅い経路（クリティカルパス）の遅延時間によって決まります。高速動作を実現するには、論理段数の削減やパイプライン化が重要です。</p>
+                </div>
+            </section>
+
+            <section id="section6">
+                <h2>6. FPGA設計フロー</h2>
+
+                <p>
+                    FPGAの設計から実装までの一連の流れを理解することは、効率的な開発に不可欠です。
+                </p>
+
+                <h3>6.1 設計フローの概要</h3>
+
+                <div class="diagram">
+                    <pre>
+FPGA設計フロー
+
+1. 仕様定義
+   ↓
+2. RTL設計（HDLコーディング）
+   │  ・Verilog HDL
+   │  ・VHDL
+   │  ・SystemVerilog
+   ↓
+3. 機能シミュレーション
+   │  ・動作確認
+   │  ・テストベンチ作成
+   ↓
+4. 論理合成
+   │  ・HDLからゲートレベルへ変換
+   │  ・最適化
+   ↓
+5. 制約設定
+   │  ・タイミング制約
+   │  ・ピン配置
+   ↓
+6. 配置配線（インプリメンテーション）
+   │  ・論理ブロックの配置
+   │  ・配線の最適化
+   ↓
+7. タイミング解析
+   │  ・セットアップ/ホールド違反チェック
+   ↓
+8. ビットストリーム生成
+   ↓
+9. FPGAへの書き込み
+   ↓
+10. 実機検証
+                    </pre>
+                </div>
+
+                <h3>6.2 各ステップの詳細</h3>
+
+                <h4>1. 仕様定義</h4>
+                <p>
+                    システムの要件を明確化します：
+                </p>
+                <ul>
+                    <li>機能要件: 何を実現するか</li>
+                    <li>性能要件: 動作周波数、スループット</li>
+                    <li>インターフェース: 入出力仕様</li>
+                    <li>リソース制約: FPGA型番、利用可能なリソース</li>
+                </ul>
+
+                <h4>2. RTL設計</h4>
+                <p>
+                    RTL（Register Transfer Level）は、レジスタ間のデータ転送として回路を記述する抽象レベルです。HDL（Hardware Description Language）を使用します：
+                </p>
+                <ul>
+                    <li><strong>Verilog HDL</strong>: C言語に似た文法、広く使用される</li>
+                    <li><strong>VHDL</strong>: Ada言語ベース、型に厳格</li>
+                    <li><strong>SystemVerilog</strong>: Verilogの拡張、検証機能が充実</li>
+                </ul>
+
+                <h4>3. 機能シミュレーション</h4>
+                <p>
+                    タイミングを考慮せず、論理的な動作を確認します：
+                </p>
+                <ul>
+                    <li>テストベンチの作成</li>
+                    <li>シミュレータでの実行（ModelSim、VCS、Xceliumなど）</li>
+                    <li>波形表示による確認</li>
+                </ul>
+
+                <h4>4. 論理合成（Synthesis）</h4>
+                <p>
+                    HDLコードをFPGAのプリミティブ（LUT、FF等）に変換します：
+                </p>
+                <ul>
+                    <li>Vivado（Xilinx）</li>
+                    <li>Quartus Prime（Intel）</li>
+                    <li>Libero（Microchip）</li>
+                </ul>
+
+                <h4>5. 制約設定</h4>
+                <p>
+                    設計に必要な条件を指定します：
+                </p>
+                <ul>
+                    <li><strong>タイミング制約</strong>: クロック周波数、入出力遅延</li>
+                    <li><strong>物理制約</strong>: ピン配置、I/O規格</li>
+                    <li><strong>配置制約</strong>: 特定ブロックの配置位置</li>
+                </ul>
+
+                <h4>6. 配置配線（Place and Route）</h4>
+                <p>
+                    論理ブロックをFPGA内の物理位置に配置し、配線します：
+                </p>
+                <ul>
+                    <li>配置（Placement）: 各論理ブロックの位置決定</li>
+                    <li>配線（Routing）: ブロック間の接続</li>
+                    <li>最適化: タイミングやリソース使用率の改善</li>
+                </ul>
+
+                <h4>7. タイミング解析（Static Timing Analysis）</h4>
+                <p>
+                    すべての経路がタイミング要件を満たしているか確認します：
+                </p>
+                <ul>
+                    <li>セットアップタイム違反のチェック</li>
+                    <li>ホールドタイム違反のチェック</li>
+                    <li>クリティカルパスの特定</li>
+                </ul>
+
+                <h4>8. ビットストリーム生成</h4>
+                <p>
+                    FPGAに書き込むためのコンフィグレーションデータを生成します。
+                </p>
+
+                <h4>9. FPGAへの書き込み</h4>
+                <p>
+                    ビットストリームをFPGAにダウンロードします：
+                </p>
+                <ul>
+                    <li>JTAG経由での直接書き込み</li>
+                    <li>フラッシュメモリへの書き込み（電源OFF後も保持）</li>
+                </ul>
+
+                <h4>10. 実機検証</h4>
+                <p>
+                    実際のハードウェア上で動作を確認します：
+                </p>
+                <ul>
+                    <li>論理アナライザによる信号観測</li>
+                    <li>ChipScope/ILA（内蔵論理アナライザ）</li>
+                    <li>実システムでの統合テスト</li>
+                </ul>
+
+                <div class="key-point">
+                    <h4>重要ポイント</h4>
+                    <p>FPGA設計は反復的なプロセスです。タイミング違反や機能エラーが見つかった場合、RTL設計や制約設定に戻って修正を行います。初期段階での十分な検証が、後工程での手戻りを減らすカギとなります。</p>
+                </div>
+            </section>
+
+            <section>
+                <h2>まとめ</h2>
+                <p>
+                    本章では、FPGAの基礎理論について学びました：
+                </p>
+                <ul>
+                    <li>FPGAは再構成可能な集積回路であり、柔軟性と性能のバランスが特徴</li>
+                    <li>ASICと比較して開発期間が短く、初期コストが低い</li>
+                    <li>LUT、フリップフロップ、BRAM、DSPなどの要素で構成される</li>
+                    <li>デジタル論理の組み合わせ回路と順序回路の理解が重要</li>
+                    <li>設計フローは仕様定義からRTL設計、合成、配置配線、検証まで多段階</li>
+                </ul>
+
+                <p>
+                    次章では、実際にHDLを使った設計について学んでいきます。
+                </p>
+
+                <a class="home-link" href="../index.html">トップに戻る</a>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2025 FPGA教科書プロジェクト</p>
+        </footer>
+    </div>
+</body>
+</html>
