@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPGA教科書 - 第4章: タイミング設計</title>
+    <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+    <aside class="sidebar" id="toc">
+        <h3>目次</h3>
+        <ul>
+            <li><a href="#section1">1. タイミング制約とは</a></li>
+            <li><a href="#section2">2. SDC制約の書き方</a></li>
+            <li><a href="#section3">3. スタティックタイミング解析</a></li>
+            <li><a href="#section4">4. クリティカルパスの改善</a></li>
+            <li><a href="#section5">5. クロック設計の実務</a></li>
+            <li><a href="#section6">6. タイミングデバッグの進め方</a></li>
+        </ul>
+    </aside>
+
+    <div class="container">
+        <header>
+            <h1>FPGA教科書</h1>
+            <p>第4章: タイミング設計</p>
+        </header>
+
+        <main class="content">
+            <div class="breadcrumbs">
+                <a href="../index.html">トップ</a> / 第4章
+            </div>
+
+            <h1 style="text-align: center; color: #667eea; margin-bottom: 2rem;">第4章: タイミング設計</h1>
+
+            <!-- ==================== Section 1 ==================== -->
+            <section id="section1">
+                <h2>1. タイミング制約とは</h2>
+
+                <p>
+                    第3章では正しく動作するRTLを書くための手法を学びました。しかし、論理的に正しいコードを書いても、
+                    それだけでは実機で正しく動くとは限りません。FPGAは物理的なシリコン上に回路が配置されるため、
+                    信号が伝わるまでに必ず時間（遅延）が生じます。この遅延を管理し、
+                    「すべての信号がクロックエッジまでに確実に届く」ことを保証する作業が<strong>タイミング設計</strong>です。
+                </p>
+
+                <h3>1.1 タイミング違反が引き起こす問題</h3>
+                <p>
+                    タイミング制約を適切に設定しないと、合成・配置配線ツールは「どの程度の速さで動かすか」を知る手がかりを失い、
+                    偶然動いたり動かなかったりする不安定な回路が生成されます。
+                    実機で発生するタイミング違反は、シミュレーションでは再現しないことが多く、
+                    原因究明に多大な時間を要します。
+                </p>
+
+                <div class="note">
+                    <strong>補足:</strong> タイミング違反は「動いたり動かなかったりする」という形で現れるため、
+                    温度・電圧・個体差によっても症状が変わります。
+                    合成レポートでのタイミング確認を習慣づけ、Negative Slack（遅延超過）をゼロにすることが実装完了の条件です。
+                </div>
+
+                <h3>1.2 セットアップ時間とホールド時間の復習</h3>
+                <p>
+                    第1章で触れたタイミングの概念を、タイミングパスの観点から改めて整理します。
+                    フリップフロップ（FF）がデータを正しく取り込むためには、クロックエッジの前後でデータが安定している必要があります。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+         Setup Time    Hold Time
+            │◄───────►│◄───────►│
+            │         │         │
+CLK  _______|‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+            │         │
+DATA ───────┤ 安定必要 ├───────────────
+            │         │
+            └─ Clock Edge
+
+セットアップ時間(Setup Time):
+  クロックエッジより前に、データが安定していなければならない時間。
+  この時間が不足すると「セットアップ違反」→ データが正しく取り込まれない。
+
+ホールド時間(Hold Time):
+  クロックエッジより後に、データが安定していなければならない時間。
+  この時間が不足すると「ホールド違反」→ 直後のデータで上書きされる。
+                    </pre>
+                </div>
+
+                <h3>1.3 タイミングパスの4種類</h3>
+                <p>
+                    STA（スタティックタイミング解析）はすべてのタイミングパスを網羅的にチェックします。
+                    パスには起点と終点によって4種類があります。
+                </p>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>パス種別</th>
+                            <th>起点</th>
+                            <th>終点</th>
+                            <th>代表例</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>レジスタ間パス</strong></td>
+                            <td>FF出力</td>
+                            <td>FF入力</td>
+                            <td>内部データパイプライン（最も一般的）</td>
+                        </tr>
+                        <tr>
+                            <td><strong>入力パス</strong></td>
+                            <td>入力ポート</td>
+                            <td>FF入力</td>
+                            <td>外部信号からの受け取り</td>
+                        </tr>
+                        <tr>
+                            <td><strong>出力パス</strong></td>
+                            <td>FF出力</td>
+                            <td>出力ポート</td>
+                            <td>外部デバイスへの信号送出</td>
+                        </tr>
+                        <tr>
+                            <td><strong>入出力パス</strong></td>
+                            <td>入力ポート</td>
+                            <td>出力ポート</td>
+                            <td>純組み合わせ回路のスルーパス</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="key-point">
+                    <h4>重要ポイント</h4>
+                    <p>
+                        タイミング制約は「ツールへの指示書」です。制約を与えることで、ツールは
+                        「このパスは何 ns 以内に信号を届けるよう配置配線を最適化せよ」と理解します。
+                        制約が不正確・不完全だと、ツールが不要な最適化を行うか、必要な最適化を行わないかのどちらかになります。
+                    </p>
+                </div>
+            </section>
+
+            <!-- ==================== Section 2 ==================== -->
+            <section id="section2">
+                <h2>2. SDC制約の書き方</h2>
+
+                <p>
+                    タイミング制約は主に<strong>SDC（Synopsys Design Constraints）</strong>形式のファイルに記述します。
+                    VivadoではXDC（Xilinx Design Constraints）、QuartusではSDCと呼ばれますが、
+                    文法はほぼ共通です。ここでは最低限押さえるべき制約コマンドを順に解説します。
+                </p>
+
+                <h3>2.1 クロック制約：create_clock</h3>
+                <p>
+                    すべての制約の起点となるのがクロック定義です。<strong>クロック制約を書かないと、
+                    ツールはその信号がクロックだと認識できず、タイミング解析が機能しません。</strong>
+                </p>
+
+                <div class="diagram">
+                    <pre>
+# 100 MHz クロック（周期 10 ns）を定義
+# -name     : クロックの論理名（レポート内で使われる識別子）
+# -period   : クロック周期 [ns]
+# -waveform : 立ち上がりエッジ・立ち下がりエッジの発生タイミング [ns]
+create_clock -name clk_sys \
+             -period 10.000 \
+             -waveform {0.000 5.000} \
+             [get_ports clk]
+
+# 200 MHz クロック（周期 5 ns）の例
+create_clock -name clk_fast \
+             -period 5.000 \
+             [get_ports clk_fast]
+                    </pre>
+                </div>
+
+                <h3>2.2 生成クロック：create_generated_clock</h3>
+                <p>
+                    PLL（Phase-Locked Loop）やMMCM（Mixed-Mode Clock Manager）などで
+                    元のクロックから生成した分周・逓倍クロックには <code>create_generated_clock</code> を使います。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+# MMCM の出力ピン clk_out1 に 50 MHz クロックを定義
+# -source   : 元クロックのピン
+# -multiply_by / -divide_by : 逓倍・分周比
+create_generated_clock -name clk_50m \
+                       -source [get_pins mmcm_inst/CLKIN1] \
+                       -multiply_by 1 \
+                       -divide_by 2 \
+                       [get_pins mmcm_inst/CLKOUT0]
+                    </pre>
+                </div>
+
+                <h3>2.3 入出力遅延：set_input_delay / set_output_delay</h3>
+                <p>
+                    外部デバイスとのインターフェース部分には、入出力遅延制約を与えます。
+                    「外部からデータがクロックエッジの何 ns 前に確定するか」「出力はクロックエッジから何 ns 後までに届く必要があるか」を指定します。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+# 入力制約の例
+# 外部デバイスからのデータが clk_sys の立ち上がりエッジから
+# 最大 2 ns 遅れて到着すると仮定
+set_input_delay -clock clk_sys -max 2.0 [get_ports data_in[*]]
+set_input_delay -clock clk_sys -min 0.5 [get_ports data_in[*]]
+
+# 出力制約の例
+# 受け取り側デバイスのセットアップ要求が 3 ns のため、
+# クロックエッジの 3 ns 前までに出力を確定させる
+set_output_delay -clock clk_sys -max 3.0 [get_ports data_out[*]]
+set_output_delay -clock clk_sys -min 0.0 [get_ports data_out[*]]
+                    </pre>
+                </div>
+
+                <h3>2.4 タイミング例外：パスの除外と緩和</h3>
+                <p>
+                    設計によっては、タイミング解析から除外したいパスや、制約を緩和すべきパスが存在します。
+                    これらは<strong>タイミング例外（Timing Exception）</strong>として明示的に指定します。
+                </p>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>コマンド</th>
+                            <th>用途</th>
+                            <th>使用例</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>set_false_path</code></td>
+                            <td>タイミング解析から完全除外</td>
+                            <td>非同期リセット、クロックドメイン間の非同期パス</td>
+                        </tr>
+                        <tr>
+                            <td><code>set_multicycle_path</code></td>
+                            <td>複数クロックサイクル分の余裕を許可</td>
+                            <td>低速な演算器、意図的に複数サイクルで使うパス</td>
+                        </tr>
+                        <tr>
+                            <td><code>set_max_delay</code></td>
+                            <td>最大遅延を直接指定</td>
+                            <td>クロックドメイン間パスの遅延上限設定</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="diagram">
+                    <pre>
+# 非同期CDCパスをタイミング解析から除外
+# （2段FF同期化で対処済みのパス）
+set_false_path -from [get_clocks clk_a] -to [get_clocks clk_b]
+
+# マルチサイクルパスの例（2クロック周期分の余裕を与える）
+set_multicycle_path -setup 2 \
+    -from [get_cells slow_compute_reg[*]] \
+    -to   [get_cells result_reg[*]]
+                    </pre>
+                </div>
+
+                <div class="note">
+                    <strong>補足:</strong> <code>set_false_path</code> の乱用は危険です。
+                    本来タイミング管理が必要なパスを誤って除外すると、実機で再現しにくいバグの温床になります。
+                    「なぜこのパスを除外できるのか」を設計意図として必ずコメントに残しましょう。
+                </div>
+            </section>
+
+            <!-- ==================== Section 3 ==================== -->
+            <section id="section3">
+                <h2>3. スタティックタイミング解析</h2>
+
+                <p>
+                    配置配線後のタイミングを検証する主要な手段が<strong>STA（Static Timing Analysis: スタティックタイミング解析）</strong>です。
+                    回路を実際に動作させることなく、全タイミングパスを数学的に検証します。
+                </p>
+
+                <h3>3.1 スラック（Slack）の読み方</h3>
+                <p>
+                    STAレポートで最も重要な指標が<strong>スラック（Slack）</strong>です。
+                    スラックとは「タイミング的な余裕」を表す値で、正の値なら合格、負の値なら違反を意味します。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+セットアップスラックの計算:
+
+  Slack = (クロック周期) - (データ到着時間) - (セットアップ時間)
+        = Required Time - Arrival Time
+
+例：クロック周期 10 ns、データ到着 8.5 ns、セットアップ時間 0.3 ns の場合
+  Slack = 10.0 - 8.5 - 0.3 = +1.2 ns  → 合格（余裕 1.2 ns）
+
+例：クロック周期 10 ns、データ到着 10.2 ns、セットアップ時間 0.3 ns の場合
+  Slack = 10.0 - 10.2 - 0.3 = -0.5 ns → 違反（0.5 ns 超過）
+                    </pre>
+                </div>
+
+                <h3>3.2 タイミングレポートの見方</h3>
+                <p>
+                    VivadoのSTAレポートを例に、各項目の意味を解説します。
+                    実際のレポートはこれよりも詳細ですが、構造は以下の形式を基本としています。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+Path Group: clk_sys
+Path Type: Setup (Max at Slow Corner)
+
+  Startpoint: reg_a_reg  (rising edge-triggered FF, clocked by clk_sys)
+  Endpoint:   reg_b_reg  (rising edge-triggered FF, clocked by clk_sys)
+
+  ┌──────────────────────────────────────────────────────┐
+  │  Data Path（信号の伝搬経路）                          │
+  ├─────────────────────┬──────────┬────────────────────┤
+  │  Cell / Net         │  Delay   │  備考              │
+  ├─────────────────────┼──────────┼────────────────────┤
+  │  reg_a_reg/Q        │  0.45 ns │  FF 出力遅延       │
+  │  net: data_mid      │  0.32 ns │  配線遅延          │
+  │  LUT2/O             │  0.51 ns │  組み合わせ遅延    │
+  │  net: data_to_b     │  0.41 ns │  配線遅延          │
+  │  reg_b_reg/D        │  ──      │  FF 入力（終点）   │
+  ├─────────────────────┼──────────┼────────────────────┤
+  │  Data Arrival Time  │  1.69 ns │  合計伝搬時間      │
+  ├─────────────────────┼──────────┼────────────────────┤
+  │  Clock Path Delay   │  0.85 ns │  クロック到達時間  │
+  │  Setup Time         │  0.30 ns │  FF セットアップ時間│
+  │  Data Required Time │  9.55 ns │  余裕の上限        │
+  ├─────────────────────┼──────────┼────────────────────┤
+  │  Slack              │  +7.86 ns│  ✓ 合格           │
+  └─────────────────────┴──────────┴────────────────────┘
+                    </pre>
+                </div>
+
+                <h3>3.3 ワーストスラックとタイミングサマリ</h3>
+                <p>
+                    ツールは全パスのなかで最もスラックが小さいパス（<strong>ワーストスラックパス</strong>）を
+                    最初にレポートします。設計が合格かどうかは、最小スラックが 0 以上であることが基準です。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+タイミングサマリ（Vivado Timing Summary の例）:
+
+  Design Timing Summary
+  ─────────────────────────────────────────────────────
+               WNS     TNS   WHS     THS   WPWS    TPWS
+  ─────────────────────────────────────────────────────
+  ns           2.31    0.00  0.12    0.00  3.45    0.00
+  ─────────────────────────────────────────────────────
+
+  WNS : Worst Negative Slack    ← セットアップ最悪値（0以上で合格）
+  TNS : Total Negative Slack    ← 違反パスのスラック合計（0が合格）
+  WHS : Worst Hold Slack        ← ホールド最悪値（0以上で合格）
+  THS : Total Hold Slack        ← ホールド違反パスのスラック合計
+  WPWS: Worst Pulse Width Slack ← パルス幅最悪値
+  TPWS: Total Pulse Width Slack ← パルス幅違反合計
+                    </pre>
+                </div>
+
+                <div class="key-point">
+                    <h4>重要ポイント</h4>
+                    <p>
+                        TNS（Total Negative Slack）はゼロが目標ですが、
+                        まず最初に<strong>WNS（Worst Negative Slack）を確認</strong>します。
+                        WNS がひどく負の場合、設計そのものの見直しやクロック周波数の引き下げが必要です。
+                        WNS を改善することで連鎖的に TNS も改善される場合が多いです。
+                    </p>
+                </div>
+
+                <h3>3.4 プロセスコーナーと解析条件</h3>
+                <p>
+                    FPGAのタイミング解析は複数の動作条件（コーナー）で行われます。
+                    製造ばらつき・温度・電圧の組み合わせにより、遅延値が変化するためです。
+                </p>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>コーナー</th>
+                            <th>温度</th>
+                            <th>電圧</th>
+                            <th>速度</th>
+                            <th>セットアップ解析</th>
+                            <th>ホールド解析</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Slow（最遅）</strong></td>
+                            <td>高温</td>
+                            <td>低電圧</td>
+                            <td>最も遅い</td>
+                            <td>◎（主要）</td>
+                            <td>△</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Fast（最速）</strong></td>
+                            <td>低温</td>
+                            <td>高電圧</td>
+                            <td>最も速い</td>
+                            <td>△</td>
+                            <td>◎（主要）</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Typical（標準）</strong></td>
+                            <td>常温</td>
+                            <td>標準</td>
+                            <td>標準</td>
+                            <td>参考値</td>
+                            <td>参考値</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- ==================== Section 4 ==================== -->
+            <section id="section4">
+                <h2>4. クリティカルパスの改善</h2>
+
+                <p>
+                    タイミング違反が発生した場合、まず<strong>クリティカルパス</strong>（スラックが最も小さいパス）を特定し、
+                    その遅延を削減する方法を検討します。改善アプローチは大きく「RTLレベルの修正」と
+                    「実装オプションの調整」の2つに分かれます。
+                </p>
+
+                <h3>4.1 クリティカルパスの特定</h3>
+                <p>
+                    STAレポートのワーストスラックパスを起点に、遅延の内訳を確認します。
+                    遅延の原因は「論理段数が多い」「配線が長い」「高負荷ネット」のいずれかであることがほとんどです。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+クリティカルパス改善の思考フロー:
+
+  タイミング違反を確認
+        │
+        ▼
+  遅延の内訳を確認
+  ┌─────────────────────────────┐
+  │ 論理遅延が大きい？           │ → LUT段数を削減する（4.2）
+  │ 配線遅延が大きい？           │ → パイプライン挿入 or 配置制約（4.3）
+  │ 高ファンアウト信号がある？   │ → バッファ挿入・レジスタ複製（4.4）
+  └─────────────────────────────┘
+        │
+        ▼
+  RTLを修正 or 実装オプションを変更
+        │
+        ▼
+  再合成・再配置配線 → タイミング再確認
+                    </pre>
+                </div>
+
+                <h3>4.2 論理段数の削減</h3>
+                <p>
+                    1クロック周期中に通過するLUTの数（論理段数）が多いほど遅延が大きくなります。
+                    演算の分解やパイプライン段挿入によって1サイクルあたりの論理量を減らします。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+// NG: 1クロックで加算→比較→選択をすべて行う（論理段数が多い）
+always @(posedge clk) begin
+    result <= (a + b + c + d > threshold) ? value_x : value_y;
+end
+
+// OK: 加算を前段のサイクルで行い、論理を分散する
+// --- Stage 1: 加算 ---
+always @(posedge clk) begin
+    sum_ab <= a + b;
+    sum_cd <= c + d;
+end
+
+// --- Stage 2: 比較・選択 ---
+always @(posedge clk) begin
+    result <= ((sum_ab + sum_cd) > threshold) ? value_x : value_y;
+end
+                    </pre>
+                </div>
+
+                <h3>4.3 パイプラインレジスタの挿入</h3>
+                <p>
+                    組み合わせ回路が長いパスの途中にレジスタを追加し、1サイクルあたりの論理量を均等に分配します。
+                    これをリタイミング（Retiming）と呼び、ツールが自動で行う場合もあります。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+【リタイミング前】
+  FF_A → [LUT4段] → [LUT3段] → [LUT5段] → FF_B
+  遅延: 4+3+5 = 12段 → タイミング違反
+
+【リタイミング後（パイプラインレジスタ挿入）】
+  FF_A → [LUT4段] → FF_mid1 → [LUT3段] → FF_mid2 → [LUT5段] → FF_B
+  各段の最大遅延: 5段 → タイミング合格
+  （スループット同じ、レイテンシは2クロック増加）
+
+Vivado でリタイミングを有効化する XDC オプション例:
+  set_property RETIMING true [get_cells target_module_inst]
+                    </pre>
+                </div>
+
+                <h3>4.4 高ファンアウトネットの対処</h3>
+                <p>
+                    1つの信号が多数のFFや論理セルに接続されている（高ファンアウト）場合、
+                    配線遅延が増大してクリティカルパスになることがあります。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+// NG: enable 信号が 500 個のFFに接続 → 高ファンアウト配線遅延
+always @(posedge clk) begin
+    if (enable) data_r <= data_in;  // enable が何百FFへ
+end
+
+// OK: レジスタで受け直してファンアウトを分散
+reg enable_r;
+always @(posedge clk) begin
+    enable_r <= enable;  // まずレジスタで受ける
+end
+
+always @(posedge clk) begin
+    if (enable_r) data_r <= data_in;
+end
+
+// さらに大きなファンアウトには複製（レプリケーション）も有効
+reg enable_r1, enable_r2;  // 同一値の信号を複製して別配線で供給
+always @(posedge clk) begin
+    enable_r1 <= enable;
+    enable_r2 <= enable;
+end
+                    </pre>
+                </div>
+
+                <h3>4.5 フロアプランニング</h3>
+                <p>
+                    ツールの自動配置では長距離配線が生じることがあります。
+                    <strong>フロアプランニング</strong>で関連するブロックを物理的に近い領域に固定することで、
+                    配線遅延を意図的に短縮できます。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+FPGA チップ上の配置イメージ:
+
+  ┌─────────────────────────────────┐
+  │  【フロアプランなし】            │
+  │  ┌──┐         ┌──┐            │
+  │  │FF│ ←長い→  │FF│            │
+  │  └──┘  配線   └──┘            │
+  │                                 │
+  │  【フロアプランあり】            │
+  │  ┌──┬──┐                      │
+  │  │FF│FF│ ← 近傍配置で短い配線  │
+  │  └──┴──┘                      │
+  └─────────────────────────────────┘
+
+Vivado での Pblock 制約例:
+  create_pblock pblock_core
+  add_cells_to_pblock [get_pblocks pblock_core] \
+      [get_cells datapath_inst]
+  resize_pblock [get_pblocks pblock_core] \
+      -add {SLICE_X10Y20:SLICE_X30Y60}
+                    </pre>
+                </div>
+
+                <div class="key-point">
+                    <h4>重要ポイント</h4>
+                    <p>
+                        タイミング改善の優先順位は「RTLの論理段数削減 → パイプライン挿入 → 高ファンアウト対策 → フロアプランニング」の順で検討します。
+                        フロアプランニングは効果が高い反面、移植性が下がるため、RTLレベルで対処できない場合の最終手段として使います。
+                    </p>
+                </div>
+            </section>
+
+            <!-- ==================== Section 5 ==================== -->
+            <section id="section5">
+                <h2>5. クロック設計の実務</h2>
+
+                <p>
+                    タイミング設計において、クロック信号は特別な位置を占めます。
+                    クロックは設計全体のすべてのFFを駆動する根幹であり、クロック品質の悪化はシステム全体の誤動作に直結します。
+                </p>
+
+                <h3>5.1 PLL / MMCM の活用</h3>
+                <p>
+                    FPGAには、入力クロックから任意の周波数・位相のクロックを生成できる専用ハードウェアが搭載されています。
+                    XilinxではMMCM（Mixed-Mode Clock Manager）・PLL、IntelではPLL・fPLLと呼ばれます。
+                    外部発振器から直接クロックを使わず、必ずこれらのIPを経由することが推奨されます。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+外部発振器（例: 100 MHz）
+        │
+        ▼
+  ┌──────────────┐
+  │  MMCM / PLL  │
+  │              │─→ clk_100m（100 MHz、位相調整済み）
+  │  ジッタ低減  │─→ clk_200m（200 MHz、逓倍）
+  │  位相整合    │─→ clk_50m （50 MHz、分周）
+  │              │─→ clk_ddr （DDRインターフェース用）
+  └──────────────┘
+
+メリット:
+  ・入力ジッタをフィルタリングして出力クロックを安定化
+  ・専用クロック配線（Global Clock Network）に乗せることで
+    チップ全体に低スキューで分配される
+  ・ロック信号（locked）で PLL の安定を確認してからリセット解除できる
+                    </pre>
+                </div>
+
+                <h3>5.2 クロックスキュー</h3>
+                <p>
+                    同じクロック信号でも、チップ上の物理的な距離の差によって各FFへのクロック到達時刻がわずかにずれます。
+                    この差を<strong>クロックスキュー</strong>と呼びます。
+                    専用のクロック配線（グローバルクロックネットワーク）を使うことでスキューを最小化できます。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+クロックスキューの影響:
+
+  FF_A へのクロック到達: T_clk + 0.1 ns
+  FF_B へのクロック到達: T_clk + 0.4 ns
+  → スキュー = 0.3 ns
+
+セットアップ解析への影響:
+  Slack = 周期 - データ遅延 - セットアップ時間 + スキュー分
+  （送信FF側のクロックが遅れると、データが先に出て余裕が増える）
+
+ホールド解析への影響:
+  スキューが大きいほどホールド違反のリスクが増す
+  （受信FF側のクロックが遅れると、データの保持が難しくなる）
+
+対策:
+  ・ グローバルクロックバッファ（BUFG）を必ず使う
+  ・ クロック信号を一般の配線（LUT経由）で分岐させない
+                    </pre>
+                </div>
+
+                <h3>5.3 クロックバッファの使い方</h3>
+                <p>
+                    FPGAのクロックはグローバルクロックバッファ（BUFGやBUFR）を経由させることで
+                    専用の低スキュークロック配線に乗せることができます。
+                    ツールは多くの場合自動でこれを挿入しますが、明示的に記述する場合もあります。
+                </p>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>バッファ種別</th>
+                            <th>特徴</th>
+                            <th>主な用途</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>BUFG</strong></td>
+                            <td>チップ全体に分配、最低スキュー</td>
+                            <td>メインシステムクロック</td>
+                        </tr>
+                        <tr>
+                            <td><strong>BUFR</strong></td>
+                            <td>リージョン内に限定、分周機能あり</td>
+                            <td>ローカルクロック、I/O分周クロック</td>
+                        </tr>
+                        <tr>
+                            <td><strong>BUFIO</strong></td>
+                            <td>I/Oブロック専用、超低レイテンシ</td>
+                            <td>高速I/Oインターフェース</td>
+                        </tr>
+                        <tr>
+                            <td><strong>BUFGCE</strong></td>
+                            <td>BUFGにクロックイネーブル機能を追加</td>
+                            <td>クロックゲーティング</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="note">
+                    <strong>補足:</strong> FPGAには使用できるグローバルクロックバッファの数に制限があります。
+                    XilinxのArtix-7では32個、Kintex-7では32個などデバイスによって異なります。
+                    多数のクロックドメインを設ける場合は、早期にクロックリソースの見積もりを行いましょう。
+                </div>
+
+                <h3>5.4 クロックゲーティング</h3>
+                <p>
+                    使用しないブロックへのクロック供給を止めることで消費電力を削減できます。
+                    ただし、FPGA上でのクロックゲーティングはグリッチを防ぐためにツール推奨の方法で実装することが重要です。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+// NG: LUT でクロックを直接ゲーティング（グリッチが発生しうる）
+wire gated_clk = clk & enable;  // 絶対に使わない
+
+// OK: クロックイネーブル付きバッファを使う（ツール推奨）
+BUFGCE bufgce_inst (
+    .I  (clk),
+    .CE (clk_enable),
+    .O  (gated_clk)
+);
+
+// より実用的: FF のクロックイネーブル端子を活用する
+// （クロック自体はゲーティングせず、FFへの取り込みを制御する）
+always @(posedge clk) begin
+    if (clk_enable) begin
+        data_r <= data_in;  // FF の CE 端子を使った実装に合成される
+    end
+end
+                    </pre>
+                </div>
+            </section>
+
+            <!-- ==================== Section 6 ==================== -->
+            <section id="section6">
+                <h2>6. タイミングデバッグの進め方</h2>
+
+                <p>
+                    タイミング違反が解消できない場合、あるいは実機でのみ発生する不具合が疑われる場合に
+                    体系的なデバッグを進めるための手順を整理します。
+                </p>
+
+                <h3>6.1 タイミングデバッグの全体フロー</h3>
+
+                <div class="diagram">
+                    <pre>
+タイミングデバッグフロー:
+
+  1. タイミングサマリを確認（WNS / TNS）
+        │
+        ├── WNS < 0（セットアップ違反）
+        │         │
+        │         ├── 論理遅延が支配的 → RTL修正（4.2, 4.3）
+        │         ├── 配線遅延が支配的 → フロアプランニング（4.5）
+        │         └── 高ファンアウト   → レジスタ複製（4.4）
+        │
+        ├── WHS < 0（ホールド違反）
+        │         │
+        │         ├── 同一クロック間  → ツールが自動修正（バッファ挿入）
+        │         └── CDC 間          → 同期化回路を再確認
+        │
+        └── WPWS < 0（パルス幅違反）
+                  └── クロック分周比や MMCM 設定を見直す
+                    </pre>
+                </div>
+
+                <h3>6.2 セットアップ違反のデバッグ手順</h3>
+                <p>
+                    セットアップ違反はタイミング設計で最もよく遭遇する問題です。
+                    以下の手順で原因を絞り込みます。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+Step 1: ワーストパスを特定
+  → タイミングレポートの先頭パスを確認
+  → 起点(Startpoint)と終点(Endpoint)を記録
+
+Step 2: 遅延の内訳を確認
+  → Logic Delay（論理遅延）と Net Delay（配線遅延）の比率を確認
+  → 論理遅延が 60% 以上 → 論理削減 / パイプライン挿入
+  → 配線遅延が 60% 以上 → フロアプランニング / 配置制約
+
+Step 3: パスの論理を分析
+  → 起点から終点までの論理段数をカウント
+  → 不要な演算・比較が含まれていないか確認
+
+Step 4: 制約に誤りがないか確認
+  → set_false_path / set_multicycle_path の指定漏れ・誤指定
+  → クロック周波数の設定ミス
+
+Step 5: 実装オプションを変更して再実行
+  → Vivado: Timing Closure Methodology を選択
+  → 配置配線の Effort Level を上げる（runtime 増加に注意）
+                    </pre>
+                </div>
+
+                <h3>6.3 実機でのタイミングデバッグ</h3>
+                <p>
+                    STAでは合格しているにもかかわらず実機で誤動作する場合、
+                    以下の要因を疑います。
+                </p>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>疑われる要因</th>
+                            <th>確認方法</th>
+                            <th>対策</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>CDCの同期化漏れ</strong></td>
+                            <td>クロックドメインを手動でリスト化して確認</td>
+                            <td>2段FF同期化・非同期FIFOを徹底</td>
+                        </tr>
+                        <tr>
+                            <td><strong>電源ノイズ</strong></td>
+                            <td>オシロスコープで電源波形を観測</td>
+                            <td>デカップリングコンデンサの追加・配置見直し</td>
+                        </tr>
+                        <tr>
+                            <td><strong>I/O遅延の制約ミス</strong></td>
+                            <td>set_input/output_delay の値を接続先データシートと照合</td>
+                            <td>制約値を修正して再実装</td>
+                        </tr>
+                        <tr>
+                            <td><strong>クロックジッタ</strong></td>
+                            <td>オシロスコープでクロック品質を測定</td>
+                            <td>PLL/MMCM を経由させる・外部発振器を改善</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>6.4 ILA（内蔵ロジックアナライザ）の活用</h3>
+                <p>
+                    Vivadoが提供する<strong>ILA（Integrated Logic Analyzer）</strong>を使うと、
+                    FPGA内部の信号をリアルタイムで観測できます。
+                    外部の論理アナライザを接続しなくても、内部信号のタイミングを直接確認できる強力なデバッグ手段です。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+ILA の使い方（概略）:
+
+  1. RTL に ILA IPコアを挿入
+     （または Vivado の Mark Debug 機能で信号を選択）
+
+  2. ビットストリームを再生成してFPGAに書き込む
+
+  3. Vivado Hardware Manager から接続
+
+  4. トリガ条件を設定
+     例: data_valid == 1 のときキャプチャ開始
+
+  5. 波形を観測して誤動作の瞬間を確認
+
+活用例:
+  ・ FSM が意図しない状態に遷移している
+  ・ データが1クロックずれて到着している
+  ・ ハンドシェイク信号が正しく受け渡されていない
+                    </pre>
+                </div>
+
+                <div class="key-point">
+                    <h4>重要ポイント</h4>
+                    <p>
+                        タイミング設計は「制約を書く → 実装する → レポートを確認する → 修正する」という
+                        反復プロセスです。最初から完璧な制約を書くことは難しいため、
+                        <strong>合成・配置配線のたびにタイミングレポートを確認する習慣</strong>が
+                        品質の高いFPGA設計を支える土台となります。
+                    </p>
+                </div>
+
+                <h3>6.5 タイミング設計チェックリスト</h3>
+
+                <div class="diagram">
+                    <pre>
+タイミング設計 完了チェックリスト:
+
+[制約の網羅性]
+  □ すべてのクロックに create_clock が定義されている
+  □ 生成クロックに create_generated_clock が定義されている
+  □ 入出力パスに set_input/output_delay が設定されている
+  □ 非同期CDCパスに set_false_path が設定されている
+  □ マルチサイクルパスに set_multicycle_path が設定されている
+
+[STAレポートの確認]
+  □ WNS が 0 以上（セットアップ合格）
+  □ WHS が 0 以上（ホールド合格）
+  □ TNS / THS がともに 0（違反パスなし）
+  □ WPWS が 0 以上（パルス幅合格）
+
+[クロック設計]
+  □ クロックはすべて PLL/MMCM 経由で供給されている
+  □ グローバルクロックバッファ（BUFG）を適切に使用している
+  □ クロック信号が LUT や一般配線を経由していない
+  □ 使用クロック数がデバイス上限以内である
+
+[実機検証]
+  □ 動作温度範囲・電圧範囲の両端でタイミング合格を確認
+  □ 実機でのランダム誤動作がないことを十分な時間確認
+                    </pre>
+                </div>
+            </section>
+
+            <!-- ==================== まとめ ==================== -->
+            <section>
+                <h2>まとめ</h2>
+                <p>
+                    本章では、FPGAを実機で正しく動作させるためのタイミング設計について体系的に学びました。
+                </p>
+                <ul>
+                    <li>タイミング制約はツールへの指示書であり、正確・網羅的に記述することが前提</li>
+                    <li>SDC/XDCでは <code>create_clock</code>、<code>set_input/output_delay</code>、タイミング例外を適切に設定する</li>
+                    <li>STAレポートのスラック（WNS・TNS）を確認し、Negative Slackをゼロにすることが実装完了の条件</li>
+                    <li>クリティカルパスの改善は「論理段数削減 → パイプライン挿入 → 高ファンアウト対策 → フロアプランニング」の順で検討する</li>
+                    <li>クロックは必ずPLL/MMCMとグローバルクロックバッファ経由で供給し、LUT経由のクロックゲーティングは厳禁</li>
+                    <li>実機デバッグにはILAが強力な武器になる</li>
+                </ul>
+
+                <p>
+                    第1章から第4章を通じて、FPGAの基礎理論・HDL・実践的な設計手法・タイミング設計という
+                    FPGA設計エンジニアに必要な知識の骨格を一通り学習しました。
+                    ここで得た知識を土台に、実際の開発ツールと実機を使った演習へ進むことで、
+                    さらに深い実践力が身につきます。
+                </p>
+
+                <a class="home-link" href="../index.html">トップに戻る</a>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2025 FPGA教科書プロジェクト</p>
+        </footer>
+    </div>
+
+    <script>
+        const toc = document.getElementById('toc');
+        const tocLinks = Array.from(toc.querySelectorAll('a[href^="#"]'));
+        const sections = tocLinks
+            .map(link => document.querySelector(link.getAttribute('href')))
+            .filter(Boolean);
+
+        const setActiveLink = (id) => {
+            tocLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                link.classList.toggle('active', href === `#${id}`);
+            });
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    setActiveLink(entry.target.id);
+                }
+            });
+        }, {
+            rootMargin: '-20% 0px -70% 0px',
+            threshold: 0
+        });
+
+        sections.forEach(section => observer.observe(section));
+
+        if (sections.length > 0) {
+            setActiveLink(sections[0].id);
+        }
+    </script>
+</body>
+</html>

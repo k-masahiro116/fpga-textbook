@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPGA教科書 - 第3章: 実践的な設計手法</title>
+    <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+    <aside class="sidebar" id="toc">
+        <h3>目次</h3>
+        <ul>
+            <li><a href="#section1">1. RTL設計の基本原則</a></li>
+            <li><a href="#section2">2. ステートマシンの設計</a></li>
+            <li><a href="#section3">3. パイプライン設計</a></li>
+            <li><a href="#section4">4. クロックドメインクロッシング</a></li>
+            <li><a href="#section5">5. テストベンチの書き方</a></li>
+            <li><a href="#section6">6. 設計品質を高めるプラクティス</a></li>
+        </ul>
+    </aside>
+
+    <div class="container">
+        <header>
+            <h1>FPGA教科書</h1>
+            <p>第3章: 実践的な設計手法</p>
+        </header>
+
+        <main class="content">
+            <div class="breadcrumbs">
+                <a href="../index.html">トップ</a> / 第3章
+            </div>
+
+            <h1 style="text-align: center; color: #667eea; margin-bottom: 2rem;">第3章: 実践的な設計手法</h1>
+
+            <!-- ==================== Section 1 ==================== -->
+            <section id="section1">
+                <h2>1. RTL設計の基本原則</h2>
+
+                <p>
+                    RTL（Register Transfer Level）設計は、レジスタ間のデータ転送という観点で回路を記述する手法です。
+                    第2章で設計フローの全体像を把握しましたが、本章ではRTLコードを実際に書くうえで守るべき原則と、
+                    現場で通用する実践的なテクニックを掘り下げます。
+                </p>
+
+                <h3>1.1 組み合わせ回路と順序回路の分離</h3>
+                <p>
+                    RTL設計の最も基本的なルールの一つは、<strong>組み合わせロジックとフリップフロップ（レジスタ）を意識的に分けて記述する</strong>ことです。
+                    Verilogを例に、典型的な構造を示します。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+// ---- 順序回路：FF（レジスタ）部分 ----
+always @(posedge clk or posedge rst) begin
+    if (rst)
+        q <= 1'b0;
+    else
+        q <= d_next;   // 次状態を保存するだけ
+end
+
+// ---- 組み合わせ回路：次状態を計算 ----
+always @(*) begin
+    d_next = (enable) ? data_in : q;
+end
+                    </pre>
+                </div>
+
+                <p>
+                    このようにFFへの代入ブロック（<code>always @(posedge clk)</code>）と、
+                    次状態を計算する組み合わせブロック（<code>always @(*)</code>）を分けると、
+                    ツールが合成しやすくなり、タイミング解析の見通しも良くなります。
+                </p>
+
+                <h3>1.2 ラッチを避ける</h3>
+                <p>
+                    Verilogでは、<code>always @(*)</code>ブロック内で<strong>すべての条件分岐を網羅しない</strong>と、
+                    意図せずラッチが生成されます。ラッチはタイミング解析が複雑になり、動作が不安定になりやすいため、
+                    FPGA設計では原則として避けます。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+// NG: else節がないためラッチが生成される
+always @(*) begin
+    if (enable)
+        y = a;
+    // enable=0 のとき y は前の値を保持 → ラッチ!
+end
+
+// OK: else節でデフォルト値を明示
+always @(*) begin
+    if (enable)
+        y = a;
+    else
+        y = 1'b0;  // 明示的にデフォルト値を設定
+end
+                    </pre>
+                </div>
+
+                <div class="note">
+                    <strong>補足:</strong> 合成ツールは通常、ラッチが生成された場合に警告（Warning）を出します。
+                    合成後のレポートに <code>latch</code> という単語が現れた場合は、意図しないラッチが存在している可能性があります。
+                </div>
+
+                <h3>1.3 リセット戦略</h3>
+                <p>
+                    FPGAのFFには、<strong>同期リセット</strong>と<strong>非同期リセット</strong>の2種類があります。それぞれの特徴を理解して使い分けることが重要です。
+                </p>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>項目</th>
+                            <th>同期リセット</th>
+                            <th>非同期リセット</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>動作タイミング</strong></td>
+                            <td>クロックエッジで処理</td>
+                            <td>クロックと無関係に即時動作</td>
+                        </tr>
+                        <tr>
+                            <td><strong>タイミング解析</strong></td>
+                            <td>通常のパスとして解析可能</td>
+                            <td>専用の解析が必要</td>
+                        </tr>
+                        <tr>
+                            <td><strong>ノイズ耐性</strong></td>
+                            <td>クロックでフィルタされる</td>
+                            <td>ノイズでリセットされる恐れあり</td>
+                        </tr>
+                        <tr>
+                            <td><strong>FPGAリソース</strong></td>
+                            <td>LUTを消費することがある</td>
+                            <td>専用ピンを活用できる</td>
+                        </tr>
+                        <tr>
+                            <td><strong>推奨度</strong></td>
+                            <td>◎（FPGA設計の主流）</td>
+                            <td>△（使用を限定的に）</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="diagram">
+                    <pre>
+// 同期リセット（推奨）
+always @(posedge clk) begin
+    if (rst)       // クロックエッジでリセット判定
+        q <= 8'h00;
+    else
+        q <= d;
+end
+
+// 非同期リセット
+always @(posedge clk or posedge rst) begin
+    if (rst)       // クロックとは独立にリセット
+        q <= 8'h00;
+    else
+        q <= d;
+end
+                    </pre>
+                </div>
+
+                <div class="key-point">
+                    <h4>重要ポイント</h4>
+                    <p>
+                        FPGA設計では<strong>同期リセットを基本</strong>とし、非同期リセットは電源投入時の初期化など
+                        限定的な用途にとどめることが推奨されます。
+                        また、外部から入力されたリセット信号は必ずFFで同期化してから使用します。
+                    </p>
+                </div>
+            </section>
+
+            <!-- ==================== Section 2 ==================== -->
+            <section id="section2">
+                <h2>2. ステートマシンの設計</h2>
+
+                <p>
+                    複雑な制御ロジックを整理するうえで欠かせないのが、<strong>ステートマシン（有限状態機械: FSM）</strong>です。
+                    状態と遷移条件を明確にすることで、設計の可読性・保守性が大幅に向上します。
+                </p>
+
+                <h3>2.1 ムーア型とミーリー型</h3>
+                <p>
+                    FSMには出力の決まり方によって2種類あります。
+                </p>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>項目</th>
+                            <th>ムーア型（Moore）</th>
+                            <th>ミーリー型（Mealy）</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>出力の依存先</strong></td>
+                            <td>現在の状態のみ</td>
+                            <td>現在の状態＋入力</td>
+                        </tr>
+                        <tr>
+                            <td><strong>応答速度</strong></td>
+                            <td>1クロック遅れる</td>
+                            <td>入力変化に即時反応</td>
+                        </tr>
+                        <tr>
+                            <td><strong>グリッチ</strong></td>
+                            <td>出力が安定しやすい</td>
+                            <td>入力次第でグリッチが発生しうる</td>
+                        </tr>
+                        <tr>
+                            <td><strong>状態数</strong></td>
+                            <td>多くなりやすい</td>
+                            <td>少なく済みやすい</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>2.2 3プロセス記述</h3>
+                <p>
+                    RTLでFSMを記述する際の定番スタイルが<strong>3プロセス記述</strong>です。
+                    「状態レジスタ」「次状態ロジック」「出力ロジック」の3つのブロックに分離します。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+// ---------- 状態定義 ----------
+localparam IDLE  = 2'd0,
+           FETCH = 2'd1,
+           EXEC  = 2'd2,
+           DONE  = 2'd3;
+
+reg [1:0] state, next_state;
+
+// ---------- プロセス1: 状態レジスタ（順序回路）----------
+always @(posedge clk) begin
+    if (rst)
+        state <= IDLE;
+    else
+        state <= next_state;
+end
+
+// ---------- プロセス2: 次状態ロジック（組み合わせ回路）----------
+always @(*) begin
+    next_state = state;  // デフォルト：現状態を保持
+    case (state)
+        IDLE:  if (start)       next_state = FETCH;
+        FETCH: if (data_ready)  next_state = EXEC;
+        EXEC:  if (done_flag)   next_state = DONE;
+        DONE:                   next_state = IDLE;
+    endcase
+end
+
+// ---------- プロセス3: 出力ロジック（ムーア型の例）----------
+always @(*) begin
+    fetch_en = 1'b0;
+    exec_en  = 1'b0;
+    busy     = 1'b0;
+    case (state)
+        IDLE:  ;
+        FETCH: begin fetch_en = 1'b1; busy = 1'b1; end
+        EXEC:  begin exec_en  = 1'b1; busy = 1'b1; end
+        DONE:  ;
+    endcase
+end
+                    </pre>
+                </div>
+
+                <div class="note">
+                    <strong>補足:</strong> プロセス2の<code>next_state = state;</code>は「デフォルト代入」と呼ばれます。
+                    これにより、未記述の遷移条件でラッチが生成されることを防ぎます。
+                </div>
+
+                <h3>2.3 状態エンコード方式</h3>
+                <p>
+                    状態をビット列に割り当てる方法にはいくつかの選択肢があります。
+                    FPGAの場合、フリップフロップが豊富に使えるため<strong>ワンホット（One-Hot）</strong>が有利なケースも多いです。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+// バイナリエンコード（状態数が多い場合にリソース効率が良い）
+localparam IDLE  = 2'b00,
+           RUN   = 2'b01,
+           WAIT  = 2'b10,
+           DONE  = 2'b11;
+
+// ワンホットエンコード（デコード回路が不要で高速、FPGAに向く）
+localparam IDLE  = 4'b0001,
+           RUN   = 4'b0010,
+           WAIT  = 4'b0100,
+           DONE  = 4'b1000;
+                    </pre>
+                </div>
+
+                <div class="key-point">
+                    <h4>重要ポイント</h4>
+                    <p>
+                        合成ツール（VivadoやQuartus）は、ソースコードのエンコード指定を参考にしながら、
+                        最適なエンコード方式を自動選択する機能を持っています。
+                        基本はツールに任せつつ、タイミングやリソースに課題が生じた場合に手動で調整するのが実践的です。
+                    </p>
+                </div>
+            </section>
+
+            <!-- ==================== Section 3 ==================== -->
+            <section id="section3">
+                <h2>3. パイプライン設計</h2>
+
+                <p>
+                    高いスループットを実現するための代表的な手法が<strong>パイプライン設計</strong>です。
+                    処理を複数のステージに分割し、各ステージを並行して動かすことで、1クロックあたりの処理量を増やします。
+                </p>
+
+                <h3>3.1 パイプラインの基本概念</h3>
+                <p>
+                    工場の組み立てラインに例えると分かりやすいです。
+                    作業を「部品取り付け」「ボルト締め」「検査」の3工程に分けると、
+                    1つ目の製品がボルト締め中でも、2つ目の製品は部品取り付けを開始できます。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+【パイプラインなし】（レイテンシ = スループット）
+
+Clk:  |1|2|3|4|5|6|7|8|9|
+入力A: [------演算------]
+入力B:                   [------演算------]
+（入力Aが終わるまで入力Bは待機）
+
+
+【3段パイプライン】（レイテンシは増えるがスループットが向上）
+
+       Stage1  Stage2  Stage3
+Clk:  |1|2|3|4|5|6|7|8|
+入力A: [S1] [S2] [S3]
+入力B:      [S1] [S2] [S3]
+入力C:           [S1] [S2] [S3]
+（毎クロック新しいデータを受け入れ可能）
+                    </pre>
+                </div>
+
+                <h3>3.2 パイプラインの実装例</h3>
+                <p>
+                    3段パイプラインの乗算加算器（<code>A * B + C</code>）を例に示します。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+// 3段パイプライン: A * B + C を計算
+module pipe_mac (
+    input         clk,
+    input  [7:0]  a, b, c,
+    output [16:0] result
+);
+
+    // ---- Stage 1: 乗算 ----
+    reg [15:0] mul_s1;
+    reg  [7:0] c_s1;      // C を次段へ引き継ぐ
+    always @(posedge clk) begin
+        mul_s1 <= a * b;
+        c_s1   <= c;
+    end
+
+    // ---- Stage 2: 加算 ----
+    reg [16:0] result_s2;
+    always @(posedge clk) begin
+        result_s2 <= mul_s1 + {9'b0, c_s1};
+    end
+
+    // ---- Stage 3: 出力レジスタ ----
+    reg [16:0] result_s3;
+    always @(posedge clk) begin
+        result_s3 <= result_s2;
+    end
+
+    assign result = result_s3;
+
+endmodule
+                    </pre>
+                </div>
+
+                <div class="note">
+                    <strong>補足:</strong> パイプライン段数を増やすほど1クロック内の演算量が減り、最大動作周波数を上げやすくなります。
+                    その代わり、入力から出力までの<strong>レイテンシ（遅延）</strong>が増加します。
+                    スループットとレイテンシはトレードオフであるため、要件に応じた段数設計が重要です。
+                </div>
+
+                <h3>3.3 パイプラインハザード</h3>
+                <p>
+                    パイプライン設計では、データの依存関係に起因する<strong>ハザード</strong>に注意が必要です。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+【データハザードの例】
+
+命令1: result1 = A * B          （Stage1→2→3で計算中）
+命令2: result2 = result1 + C    （result1がまだ確定していない！）
+
+対策: ストール（バブル挿入）またはフォワーディングで解決
+             ↓
+ストール例: 命令2の実行を result1 確定まで遅らせる
+
+Clk:    |1|2|3|4|5|6|7|
+命令1:  [S1][S2][S3]
+命令2:              [S1][S2][S3]  ← result1 確定後に開始
+                    </pre>
+                </div>
+            </section>
+
+            <!-- ==================== Section 4 ==================== -->
+            <section id="section4">
+                <h2>4. クロックドメインクロッシング</h2>
+
+                <p>
+                    実際の設計では、異なるクロックで動作する回路ブロック間でデータをやり取りする場面が生じます。
+                    これを<strong>クロックドメインクロッシング（CDC: Clock Domain Crossing）</strong>と呼び、
+                    正しく対処しないと<strong>メタステーブル</strong>による予測不能な誤動作を引き起こします。
+                </p>
+
+                <h3>4.1 メタステーブルとは</h3>
+                <p>
+                    フリップフロップのセットアップ時間またはホールド時間が守られないと、
+                    FFの出力が 0 でも 1 でもない不確定な電圧レベルに留まる現象（メタステーブル）が発生します。
+                    この状態がいつ解消されるかは確率的であり、システム全体の誤動作につながります。
+                </p>
+
+                <h3>4.2 2段FF同期化回路</h3>
+                <p>
+                    1ビット信号のCDCに最もよく使われる手法が<strong>2段FF同期化</strong>です。
+                    宛先クロックでFFを2段通過させることで、メタステーブルが解消されるまでの時間（MTBF）を実用上問題ない水準に引き上げます。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+// 送信側クロック(clk_a)のドメインから
+// 受信側クロック(clk_b)のドメインへ 1bit 信号を転送
+
+module sync_2ff (
+    input  clk_b,    // 受信側クロック
+    input  rst_b,    // 受信側リセット（同期）
+    input  data_in,  // 送信側ドメインの信号
+    output data_out
+);
+    reg ff1, ff2;
+
+    always @(posedge clk_b) begin
+        if (rst_b) begin
+            ff1 <= 1'b0;
+            ff2 <= 1'b0;
+        end else begin
+            ff1 <= data_in;  // 1段目: メタステーブル発生の可能性
+            ff2 <= ff1;      // 2段目: 解消を待つ
+        end
+    end
+
+    assign data_out = ff2;   // 安全な出力
+
+endmodule
+
+/*
+タイミングイメージ:
+
+clk_b  __|‾|_|‾|_|‾|_|‾|_
+data_in  ______|‾‾‾‾‾‾‾‾‾
+ff1      ________|?|‾‾‾‾‾‾  ← ?はメタステーブルの可能性
+ff2      ___________|‾‾‾‾‾  ← 1クロック後には安定
+*/
+                    </pre>
+                </div>
+
+                <h3>4.3 複数ビットのCDC手法</h3>
+                <p>
+                    複数ビットのデータを安全に転送するには、2段FF同期化だけでは不十分です。代表的な手法を示します。
+                </p>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>手法</th>
+                            <th>適用場面</th>
+                            <th>特徴</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>グレイコード変換</strong></td>
+                            <td>カウンタ値の転送</td>
+                            <td>1ビットずつしか変化しないため2段FFと相性が良い</td>
+                        </tr>
+                        <tr>
+                            <td><strong>非同期FIFO</strong></td>
+                            <td>連続データのストリーム転送</td>
+                            <td>FPGAのBRAM＋グレイコードポインタで実装</td>
+                        </tr>
+                        <tr>
+                            <td><strong>ハンドシェイク</strong></td>
+                            <td>低頻度のデータ転送</td>
+                            <td>req/ack信号でそれぞれ2段FF同期化</td>
+                        </tr>
+                        <tr>
+                            <td><strong>FIFO IPコア</strong></td>
+                            <td>汎用</td>
+                            <td>ツールが提供するIPを使うのが最も確実</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="key-point">
+                    <h4>重要ポイント</h4>
+                    <p>
+                        CDCの問題はシミュレーションでは発見しにくく、実機動作後に不定期に発生する
+                        <strong>再現性の低いバグ</strong>として現れることが多いです。
+                        設計段階でクロックドメインを明確に整理し、ドメインをまたぐパスを最小化することが重要です。
+                    </p>
+                </div>
+            </section>
+
+            <!-- ==================== Section 5 ==================== -->
+            <section id="section5">
+                <h2>5. テストベンチの書き方</h2>
+
+                <p>
+                    設計の品質を担保するには、RTLコードと同等かそれ以上の労力を検証（Verification）に費やす必要があります。
+                    テストベンチはシミュレーション環境そのものであり、設計の「仕様書」としての役割も果たします。
+                </p>
+
+                <h3>5.1 テストベンチの基本構造</h3>
+                <p>
+                    テストベンチは合成不要（シミュレーション専用）のため、<code>initial</code>ブロックや
+                    <code>$display</code>などのシステムタスクが使えます。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+`timescale 1ns / 1ps    // 時間単位 / 精度
+
+module tb_counter;      // テストベンチはポートなし
+
+    // ---------- DUT の入出力に対応する変数 ----------
+    reg        clk, rst, enable;
+    wire [3:0] count;
+
+    // ---------- DUT インスタンス化 ----------
+    counter dut (
+        .clk    (clk),
+        .rst    (rst),
+        .enable (enable),
+        .count  (count)
+    );
+
+    // ---------- クロック生成（10ns周期 = 100MHz） ----------
+    initial clk = 0;
+    always #5 clk = ~clk;
+
+    // ---------- テストシナリオ ----------
+    initial begin
+        // 初期化
+        rst    = 1;
+        enable = 0;
+        #20;
+
+        // リセット解除
+        @(negedge clk);
+        rst = 0;
+
+        // カウントアップ確認
+        enable = 1;
+        repeat (20) @(posedge clk);
+
+        // 途中停止確認
+        enable = 0;
+        repeat (5) @(posedge clk);
+        enable = 1;
+        repeat (5) @(posedge clk);
+
+        $display("Simulation PASS");
+        $finish;
+    end
+
+    // ---------- セルフチェック（アサーション例） ----------
+    always @(posedge clk) begin
+        if (!rst && count === 4'bxxxx) begin
+            $display("ERROR: count is unknown at time %0t", $time);
+            $stop;
+        end
+    end
+
+endmodule
+                    </pre>
+                </div>
+
+                <h3>5.2 テスト網羅性の考え方</h3>
+                <p>
+                    テストベンチを書く際は、以下の観点で入力パターンを考えます。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+チェックリスト例:
+
+[正常系]
+  □ 通常動作シーケンス
+  □ 最小値・最大値の境界入力
+  □ 連続動作（長時間安定性）
+
+[異常系・コーナーケース]
+  □ リセット中の入力変化
+  □ 同じクロックで複数イベントが重なる場合
+  □ オーバーフロー・アンダーフロー
+
+[タイミング系]
+  □ 最速・最遅の入力タイミング
+  □ グリッチ（短パルス）入力
+  □ FSMのすべての状態遷移パスを網羅
+                    </pre>
+                </div>
+
+                <h3>5.3 波形ダンプとデバッグ</h3>
+                <p>
+                    シミュレーション中に波形をファイルへ書き出しておくと、GTKWaveなどのビューアで
+                    タイミングを視覚的に確認できます。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+// VCD（Value Change Dump）ファイルに波形を書き出す例
+initial begin
+    $dumpfile("sim.vcd");   // 出力ファイル名
+    $dumpvars(0, tb_counter); // 階層レベル0（全信号）をダンプ
+end
+                    </pre>
+                </div>
+
+                <div class="note">
+                    <strong>補足:</strong> VivadoやQuesta（ModelSim後継）などの統合ツールは、
+                    GUI上でリアルタイムに波形を表示できます。
+                    コマンドラインのみで作業する場合は、VCDファイルとGTKWaveの組み合わせが手軽です。
+                </div>
+            </section>
+
+            <!-- ==================== Section 6 ==================== -->
+            <section id="section6">
+                <h2>6. 設計品質を高めるプラクティス</h2>
+
+                <p>
+                    RTLコードの機能正確性だけでなく、<strong>読みやすさ・保守性・再利用性</strong>を意識した設計を心がけることが、
+                    長期的に品質を高める近道です。ここでは現場で実際に効果のあるプラクティスを紹介します。
+                </p>
+
+                <h3>6.1 命名規則の統一</h3>
+                <p>
+                    信号名に一貫したルールを設けることで、コードの可読性が飛躍的に上がります。
+                    プロジェクト内で最初に決めてドキュメントに残しておきましょう。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+// 命名規則の例
+wire data_in;         // 入力信号: サフィックス _in
+wire data_out;        // 出力信号: サフィックス _out
+wire data_valid;      // フラグ系: 動詞または形容詞
+reg  [7:0] count_r;  // レジスタ: サフィックス _r
+wire       rst_n;     // アクティブLow: サフィックス _n
+parameter  DATA_W = 8; // 定数: 全大文字スネークケース
+                    </pre>
+                </div>
+
+                <h3>6.2 マジックナンバーを避ける</h3>
+                <p>
+                    数値をコード中に直接書く（マジックナンバー）と、意味が分からなくなり変更も困難になります。
+                    <code>parameter</code>や<code>localparam</code>で名前を付けましょう。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+// NG: 数値の意味が不明
+if (count == 8'd255) reset_flag <= 1'b1;
+
+// OK: 意図が明確
+localparam COUNT_MAX = 8'd255;
+if (count == COUNT_MAX) reset_flag <= 1'b1;
+                    </pre>
+                </div>
+
+                <h3>6.3 モジュール分割の指針</h3>
+                <p>
+                    一つのモジュールに詰め込みすぎず、適切な粒度でモジュール分割することで、
+                    シミュレーション・再利用・チームでの並行開発が容易になります。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+設計の分割指針（目安）:
+
+┌─────────────────────────────────────────┐
+│  トップレベル                            │
+│  ├── クロック/リセット管理モジュール     │
+│  ├── データパスモジュール                │
+│  │   ├── 演算器 (ALU)                   │
+│  │   ├── レジスタファイル               │
+│  │   └── データバッファ（FIFO等）        │
+│  └── 制御モジュール                      │
+│      ├── FSM（メイン制御）              │
+│      └── インターフェース制御           │
+└─────────────────────────────────────────┘
+
+1モジュールの目安:
+  ・機能的にひとつの役割（単一責任）
+  ・RTLコードが300〜500行を超えたら分割を検討
+  ・FFのクロックドメインは原則1ドメインに統一
+                    </pre>
+                </div>
+
+                <h3>6.4 合成レポートの読み方</h3>
+                <p>
+                    合成後のレポートを確認する習慣を持つことで、意図しない回路生成を早期に検出できます。
+                    特に以下の項目に注目します。
+                </p>
+
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>確認項目</th>
+                            <th>注目ポイント</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Latch推測</strong></td>
+                            <td><code>latch</code> の文字が出たら意図しない場合が多い</td>
+                        </tr>
+                        <tr>
+                            <td><strong>リソース使用率</strong></td>
+                            <td>LUT・FF・BRAM・DSPの使用率。80%超は要注意</td>
+                        </tr>
+                        <tr>
+                            <td><strong>タイミング違反</strong></td>
+                            <td>Negative Slackのパスはクリティカルパス候補</td>
+                        </tr>
+                        <tr>
+                            <td><strong>警告（Warning）</strong></td>
+                            <td>未接続信号、定数化された信号は設計ミスのサイン</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="key-point">
+                    <h4>重要ポイント</h4>
+                    <p>
+                        優れたRTL設計者は「書いたコードが合成後にどのような回路になるか」を常に意識しています。
+                        シミュレーションで動作確認するだけでなく、合成・配置配線後のレポートを定期的に確認することで、
+                        性能やリソースの問題を早期に発見・修正できます。
+                    </p>
+                </div>
+
+                <h3>6.5 設計レビューのチェックポイント</h3>
+                <p>
+                    RTLコードを完成させた後は、以下の観点でセルフレビューを行いましょう。
+                </p>
+
+                <div class="diagram">
+                    <pre>
+RTL セルフレビューチェックリスト:
+
+[ラッチ・リセット]
+  □ 意図しないラッチが生成されていないか
+  □ リセット戦略（同期/非同期）が統一されているか
+  □ すべてのFFにリセットが接続されているか
+
+[クロックドメイン]
+  □ CDC箇所がすべて明示的に同期化されているか
+  □ クロックゲーティングが合成ツール推奨の方法か
+
+[FSM]
+  □ デフォルト遷移・出力が定義されているか
+  □ すべての状態からリセット可能か
+  □ 未定義状態への対処が記述されているか
+
+[テスト容易性]
+  □ 内部状態がデバッグ用に観測可能か
+  □ テストベンチが境界値・異常系を網羅しているか
+                    </pre>
+                </div>
+            </section>
+
+            <!-- ==================== まとめ ==================== -->
+            <section>
+                <h2>まとめ</h2>
+                <p>
+                    本章では、実務で通用するRTL設計の手法を体系的に整理しました。
+                </p>
+                <ul>
+                    <li>組み合わせ回路と順序回路を分離し、ラッチ生成を避ける</li>
+                    <li>リセットは同期リセットを基本とし、非同期リセットは限定的に使う</li>
+                    <li>FSMは3プロセス記述でデフォルト代入を活用する</li>
+                    <li>パイプライン化でスループットを向上させる（レイテンシとのトレードオフを意識）</li>
+                    <li>クロックドメインクロッシングは2段FF・非同期FIFO・ハンドシェイクで確実に対処する</li>
+                    <li>テストベンチで正常系・異常系・コーナーケースを網羅する</li>
+                    <li>命名規則・マジックナンバー排除・モジュール分割で保守性の高い設計を目指す</li>
+                </ul>
+
+                <p>
+                    次章では、これらの設計を実際にFPGA上で正しく動かすための<strong>タイミング設計</strong>について掘り下げます。
+                    タイミング制約の書き方や、クリティカルパス改善の具体的な手法を学んでいきます。
+                </p>
+
+                <a class="home-link" href="../index.html">トップに戻る</a>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2025 FPGA教科書プロジェクト</p>
+        </footer>
+    </div>
+
+    <script>
+        const toc = document.getElementById('toc');
+        const tocLinks = Array.from(toc.querySelectorAll('a[href^="#"]'));
+        const sections = tocLinks
+            .map(link => document.querySelector(link.getAttribute('href')))
+            .filter(Boolean);
+
+        const setActiveLink = (id) => {
+            tocLinks.forEach(link => {
+                const href = link.getAttribute('href');
+                link.classList.toggle('active', href === `#${id}`);
+            });
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    setActiveLink(entry.target.id);
+                }
+            });
+        }, {
+            rootMargin: '-20% 0px -70% 0px',
+            threshold: 0
+        });
+
+        sections.forEach(section => observer.observe(section));
+
+        if (sections.length > 0) {
+            setActiveLink(sections[0].id);
+        }
+    </script>
+</body>
+</html>
